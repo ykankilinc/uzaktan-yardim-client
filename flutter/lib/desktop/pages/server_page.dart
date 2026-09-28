@@ -1063,6 +1063,14 @@ class _CmControlPanel extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        // Uzaktan Yardım: onay öncesi bilgilendirme metni.
+        Text(
+          'Destek için ekranınıza bağlanılacak. Yalnızca bildirdiğiniz sorunla '
+          'ilgili işlem yapılacak, kişisel dosyalarınıza erişilmeyecektir. '
+          'Oturumu dilediğiniz an kapatabilirsiniz.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+        ).marginOnly(left: 8, right: 8, bottom: 10),
         Offstage(
           offstage: !showElevation || !showAccept,
           child: buildButton(context, color: Colors.green[700], onClick: () {
