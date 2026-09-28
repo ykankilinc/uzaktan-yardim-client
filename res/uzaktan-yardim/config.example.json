@@ -1,0 +1,30 @@
+{
+  "app-name": "UzaktanYardim",
+  "conn-type": "incoming",
+  "disable-settings": "Y",
+  "disable-ab": "Y",
+  "disable-account": "Y",
+  "override-settings": {
+    "custom-rendezvous-server": "<ID_SUNUCUSU>",
+    "relay-server": "<RELAY_SUNUCUSU>",
+    "api-server": "https://<API_SUNUCUSU>",
+    "key": "<HBBS_PUBLIC_KEY>",
+    "allow-websocket": "N",
+    "approve-mode": "",
+    "verification-method": "use-both-passwords",
+    "uy-temp-password-requires-click": "Y",
+    "enable-check-update": "N",
+    "allow-auto-update": "N",
+    "allow-remote-config-modification": "N",
+    "enable-lan-discovery": "N",
+    "hide-server-settings": "Y",
+    "hide-network-settings": "Y",
+    "hide-proxy-settings": "Y",
+    "hide-websocket-settings": "Y",
+    "hide-security-settings": "Y",
+    "hide-help-cards": "Y",
+    "hide-powered-by-me": "Y",
+    "disable-change-id": "Y",
+    "allow-command-line-settings-when-settings-disabled": "Y"
+  }
+}

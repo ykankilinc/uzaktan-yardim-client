@@ -2080,7 +2080,20 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+// Uzaktan Yardım: derlemeye gömülü, imzasız custom client yapılandırması.
+// Resmi custom.txt mekanizması RustDesk'in özel anahtarıyla imza istediği için
+// aynı ayarlar burada doğrudan uygulanır.
+const BUILTIN_CUSTOM_CLIENT: &str = include_str!("../res/uzaktan-yardim/config.json");
+
+fn apply_builtin_custom_client() {
+    match serde_json::from_str::<HashMap<String, serde_json::Value>>(BUILTIN_CUSTOM_CLIENT) {
+        Ok(data) => apply_custom_client(data),
+        Err(e) => log::error!("Failed to parse builtin custom client config: {e}"),
+    }
+}
+
 pub fn load_custom_client() {
+    apply_builtin_custom_client();
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -2192,13 +2205,16 @@ pub fn read_custom_client(config: &str) {
         log::error!("Failed to dec custom client config");
         return;
     };
-    let Ok(mut data) =
+    let Ok(data) =
         serde_json::from_slice::<std::collections::HashMap<String, serde_json::Value>>(&data)
     else {
         log::error!("Failed to parse custom client config");
         return;
     };
+    apply_custom_client(data);
+}
 
+fn apply_custom_client(mut data: HashMap<String, serde_json::Value>) {
     if let Some(app_name) = data.remove("app-name") {
         if let Some(app_name) = app_name.as_str() {
             *config::APP_NAME.write().unwrap() = app_name.to_owned();
