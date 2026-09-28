@@ -2739,6 +2739,15 @@ impl Connection {
                     }
                 } else {
                     self.update_failure_with_scope(failure, true, 0, FailureScope::Default);
+                    // Uzaktan Yardım: tek seferlik şifre doğru olsa da karşı tarafın
+                    // "Kabul et" onayı istenir. Sabit (kalıcı) şifre onaysız girer.
+                    if err_msg.is_empty()
+                        && self.conn_audit_primary_auth == ConnAuditPrimaryAuth::TemporaryPassword
+                        && crate::get_builtin_option("uy-temp-password-requires-click") == "Y"
+                    {
+                        self.try_start_cm(lr.my_id, lr.my_name, false);
+                        return true;
+                    }
                     if err_msg.is_empty() {
                         #[cfg(target_os = "linux")]
                         self.linux_headless_handle.wait_desktop_cm_ready().await;
