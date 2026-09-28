@@ -130,6 +130,9 @@ jobs:
         run: |
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          # Kurulum dosyaları olduğu gibi kopyalar; kısayol, servis ve güncelleme
+          # "<app-name>.exe" bekler. Bu yüzden ana exe uygulama adıyla olmalı.
+          mv ./rustdesk/rustdesk.exe ./rustdesk/UzaktanYardim.exe
 
           # Sanal ekran sürücüsü (upstream ile aynı)
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
@@ -157,7 +160,7 @@ jobs:
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/UzaktanYardim.exe
           popd
           mkdir -p ./out
           cp ./target/release/rustdesk-portable-packer.exe ./out/UzaktanYardim-TekSeferlik-qs.exe
