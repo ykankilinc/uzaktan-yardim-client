@@ -22,6 +22,69 @@ const TIME_CONN: Duration = Duration::from_secs(3);
 lazy_static::lazy_static! {
     static ref SENDER : Mutex<broadcast::Sender<Vec<i32>>> = Mutex::new(start_hbbs_sync());
     static ref PRO: Arc<Mutex<bool>> = Default::default();
+    // Uzaktan Yardım: panele bir sonraki heartbeat'te bildirilecek komut sonucu.
+    static ref UY_ACK: Mutex<Option<Value>> = Default::default();
+    // Aynı komut tekrar gelirse yeniden uygulanmaz (ör. kaldırma iki kez başlamasın).
+    static ref UY_LAST_ID: Mutex<String> = Default::default();
+}
+
+/// Uzaktan Yardım: panelin heartbeat cevabında gönderdiği komutu uygular.
+/// Komutlar yalnızca bu cihazın kimliği (id + uuid) doğrulanmış heartbeat'ine,
+/// sertifikası doğrulanan HTTPS bağlantısı üzerinden gelir.
+#[cfg(not(any(target_os = "ios")))]
+fn uy_handle_command(cmd: &Value) {
+    let id = cmd["id"].as_str().unwrap_or_default().to_owned();
+    if id.is_empty() || id.len() > 64 {
+        return;
+    }
+    {
+        let mut last = UY_LAST_ID.lock().unwrap();
+        if *last == id {
+            return;
+        }
+        *last = id.clone();
+    }
+    let (ok, error): (bool, String) = match cmd["action"].as_str().unwrap_or_default() {
+        "set_password" => {
+            let password = cmd["password"].as_str().unwrap_or_default();
+            if password.len() < 8 {
+                (false, "şifre çok kısa".to_owned())
+            } else if Config::set_permanent_password(password) {
+                (true, String::new())
+            } else {
+                (false, "şifre ayarlanamadı".to_owned())
+            }
+        }
+        "clear_password" => (Config::set_permanent_password(""), String::new()),
+        "uninstall" => uy_uninstall(),
+        _ => (false, "bilinmeyen komut".to_owned()),
+    };
+    log::info!("Uzaktan Yardım komutu {}: ok={} {}", id, ok, error);
+    *UY_ACK.lock().unwrap() = Some(json!({ "id": id, "ok": ok, "error": error }));
+}
+
+#[cfg(windows)]
+fn uy_uninstall() -> (bool, String) {
+    if !crate::platform::is_installed() {
+        return (false, "client kurulu değil (tek seferlik)".to_owned());
+    }
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => return (false, e.to_string()),
+    };
+    // Sonucun panele ulaşması için bir heartbeat süresi bekleyip kaldır.
+    std::thread::spawn(move || {
+        std::thread::sleep(TIME_HEARTBEAT + Duration::from_secs(5));
+        if let Err(e) = std::process::Command::new(exe).arg("--uninstall").spawn() {
+            log::error!("Kaldırma başlatılamadı: {}", e);
+        }
+    });
+    (true, String::new())
+}
+
+#[cfg(all(not(windows), not(target_os = "ios")))]
+fn uy_uninstall() -> (bool, String) {
+    (false, "bu platformda desteklenmiyor".to_owned())
 }
 
 #[cfg(not(any(target_os = "ios")))]
@@ -241,8 +304,22 @@ async fn start_hbbs_sync_async() {
                 }
                 let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
                 v["modified_at"] = json!(modified_at);
-                if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
+                let uy_ack = UY_ACK.lock().unwrap().take();
+                if let Some(ack) = &uy_ack {
+                    v["uy_ack"] = ack.clone();
+                }
+                let posted = crate::post_request(url.clone(), v.to_string(), "").await;
+                if posted.is_err() {
+                    // Gönderilemediyse sonraki heartbeat'te tekrar dene.
+                    if let Some(ack) = uy_ack {
+                        UY_ACK.lock().unwrap().get_or_insert(ack);
+                    }
+                }
+                if let Ok(s) = posted {
                     if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {
+                        if let Some(cmd) = rsp.remove("uy") {
+                            uy_handle_command(&cmd);
+                        }
                         if rsp.remove("sysinfo").is_some() {
                             info_uploaded.uploaded = false;
                             config::Status::set("sysinfo_hash", "".to_owned());
