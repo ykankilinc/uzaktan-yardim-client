@@ -160,6 +160,14 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     hbb_common::init_log(false, &log_name);
 
+    // Uzaktan Yardım: Teknisyen eşleştirme linki (<uygulama>://eslestir/<kod>); arayüz açılmaz.
+    if config::is_outgoing_only() && args.len() > 0 {
+        if let Some(code) = crate::hbbs_http::uy_pair::code_from_link(&args[0]) {
+            crate::hbbs_http::uy_pair::pair_and_notify(&code);
+            return None;
+        }
+    }
+
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
     if args.len() > 0 && args[0].starts_with(&crate::get_uri_prefix()) {
