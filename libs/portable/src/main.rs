@@ -17,7 +17,11 @@ const APP_METADATA: &[u8] = include_bytes!("../app_metadata.toml");
 const APP_METADATA: &[u8] = &[];
 const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
-const APP_PREFIX: &str = "rustdesk";
+// Uzaktan Yardım: çeşitler (müşteri/teknisyen) aynı PC'de birbirinin açıldığı klasörü ezmesin.
+const APP_PREFIX: &str = match option_env!("UY_APP") {
+    Some(name) => name,
+    None => "rustdesk",
+};
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 #[cfg(windows)]
 const SET_FOREGROUND_WINDOW_ENV_KEY: &str = "SET_FOREGROUND_WINDOW";

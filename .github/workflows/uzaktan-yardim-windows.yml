@@ -2,9 +2,15 @@
 # Adımlar upstream flutter-build.yml'deki "build-for-windows-flutter" işinden
 # alınmıştır (x64 dalı); imzalama, MSI ve arm64 çıkarılmıştır.
 #
-# Çıktılar (aynı derleme, farklı dosya adı — RustDesk davranışı dosya adına bakar):
-#   UzaktanYardim-TekSeferlik-qs.exe  → "-qs.exe": hızlı destek, kurulum önerilmez
-#   UzaktanYardim-Install.exe         → "install.exe": açılınca kurulum başlar
+# İki çeşit (her biri ayrı derleme; yapılandırma derlemeye gömülü olduğu için):
+#   musteri   — sadece gelen bağlantı; müşteriye dağıtılır (panel /indir)
+#     UzaktanYardim-TekSeferlik-qs.exe  → "-qs.exe": hızlı destek, kurulum önerilmez
+#     UzaktanYardim-Install.exe         → "install.exe": açılınca kurulum başlar
+#   teknisyen — sadece giden bağlantı; yöneticinin PC'si (panelde girişle indirilir)
+#     UzaktanYardimTeknisyen-Install.exe → kurulum; uzaktanyardimteknisyen:// kaydeder
+#     UzaktanYardimTeknisyen.exe         → kurulumsuz çalışır
+#   Teknisyen yapılandırması aynı secret'tan türetilir: ayrı uygulama adı (ayrı
+#   klasör/servis/adres şeması, müşteri client'ıyla çakışmaz), conn-type outgoing.
 #
 # Sunucu bilgileri repoda değil: res/uzaktan-yardim/config.json derleme sırasında
 # UY_CLIENT_CONFIG_B64 secret'ından üretilir. Exe'ler bu bilgileri içerdiği için
@@ -15,6 +21,12 @@ name: Uzaktan Yardim Windows
 
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: "Derlenecek çeşit"
+        type: choice
+        options: [ikisi, musteri, teknisyen]
+        default: ikisi
 
 env:
   RUST_VERSION: "1.75"
@@ -40,6 +52,13 @@ jobs:
   build-windows-x64:
     needs: [generate-bridge, build-topmost-window]
     runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(inputs.variant == 'ikisi' && '["musteri","teknisyen"]' || format('["{0}"]', inputs.variant)) }}
+    env:
+      UY_VARIANT: ${{ matrix.variant }}
+      UY_APP: ${{ matrix.variant == 'teknisyen' && 'UzaktanYardimTeknisyen' || 'UzaktanYardim' }}
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -63,7 +82,7 @@ jobs:
             exit 1
           fi
           echo "$UY_CLIENT_CONFIG_B64" | base64 -d > res/uzaktan-yardim/config.json
-          python3 -c "import json; json.load(open('res/uzaktan-yardim/config.json'))"
+          python3 res/uzaktan-yardim/variant.py res/uzaktan-yardim/config.json "$UY_VARIANT" "$UY_APP"
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -132,7 +151,7 @@ jobs:
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
           # Kurulum dosyaları olduğu gibi kopyalar; kısayol, servis ve güncelleme
           # "<app-name>.exe" bekler. Bu yüzden ana exe uygulama adıyla olmalı.
-          mv ./rustdesk/rustdesk.exe ./rustdesk/UzaktanYardim.exe
+          mv ./rustdesk/rustdesk.exe "./rustdesk/$env:UY_APP.exe"
 
           # Sanal ekran sürücüsü (upstream ile aynı)
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
@@ -160,16 +179,22 @@ jobs:
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/UzaktanYardim.exe
+          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/$UY_APP.exe"
           popd
           mkdir -p ./out
-          cp ./target/release/rustdesk-portable-packer.exe ./out/UzaktanYardim-TekSeferlik-qs.exe
-          cp ./target/release/rustdesk-portable-packer.exe ./out/UzaktanYardim-Install.exe
+          packer=./target/release/rustdesk-portable-packer.exe
+          if [ "$UY_VARIANT" = teknisyen ]; then
+            cp $packer "./out/$UY_APP-Install.exe"
+            cp $packer "./out/$UY_APP.exe"
+          else
+            cp $packer "./out/$UY_APP-TekSeferlik-qs.exe"
+            cp $packer "./out/$UY_APP-Install.exe"
+          fi
           sha256sum ./out/*.exe | tee ./out/SHA256SUMS.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: uzaktan-yardim-windows-x64
+          name: uzaktan-yardim-${{ matrix.variant }}-windows-x64
           path: out
           retention-days: 1
